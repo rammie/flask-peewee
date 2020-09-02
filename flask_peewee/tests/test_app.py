@@ -13,7 +13,7 @@ from peewee import (
 from flask_peewee.rest import AdminAuthentication
 from flask_peewee.rest import Authentication
 from flask_peewee.rest import RestAPI
-from flask_peewee.rest import RestResource
+from flask_peewee.rest import RestResource, ReverseResource
 from flask_peewee.rest import RestrictOwnerResource
 
 
@@ -152,7 +152,7 @@ class BResourceV2(DeletableResource):
 
 
 class AReverseResource(DeletableResource):
-    reverse_resources = {'bmodel': (BResourceV2, BModel)}
+    reverse_resources = {'bmodel': ReverseResource(BResourceV2, BModel, 'bmodel_foo')}
 
     def get_api_name(self):
         return super().get_api_name() + "v2"

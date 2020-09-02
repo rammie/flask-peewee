@@ -61,6 +61,25 @@ class AdminAuthentication(Authentication):
         )
 
 
+class ReverseResource(object):
+    """ ReverseResource.
+
+    This is a secondary requested resource that has a foreign key to the primary requested resource.
+    """
+
+    def __init__(self, resource_class, model, attr=None):
+        """ Initialize the ReverseResource. """
+        self.resource_class = resource_class
+        self.model = model
+        self.attr = attr
+
+    def setup(self, resource):
+        """ Create the resource this points to, and return this ReverseResource. """
+        self.resource = resource.create_subresource(self.resource_class, self.model)
+
+        return self
+
+
 class RestResource(object):
     paginate_by = 20
 
@@ -135,7 +154,7 @@ class RestResource(object):
             ])
 
         self._reverse_resources = {
-            name: self.create_subresource(*v)
+            name: v.setup(self)
             for name, v in self.reverse_resources.items()
         }
 
@@ -148,8 +167,8 @@ class RestResource(object):
         return resource(self.api, model, self.authentication, self.allowed_methods)
 
     def extract_reverse_resource_field_tree(self, field_tree):
-        for name, resource in self._reverse_resources.items():
-            field_tree.children[name] = resource._field_tree
+        for name, rr in self._reverse_resources.items():
+            field_tree.children[name] = rr.resource._field_tree
 
         for name, resource in self._resources.items():
             resource.extract_reverse_resource_field_tree(field_tree.children[name])
@@ -181,18 +200,18 @@ class RestResource(object):
         fields = [self.model]
         for v in self._resources.values():
             fields += v.get_selected_fields()
-        for v in self._reverse_resources.values():
-            fields += v.get_selected_fields()
+        for rr in self._reverse_resources.values():
+            fields += rr.resource.get_selected_fields()
         return fields
 
     def prepare_joins(self, query):
         query = query.switch(self.model)
-        for r in self._resources.values():
+        for name, r in self._resources.items():
             query = query.switch(self.model).join(r.model, JOIN.LEFT_OUTER)
             query = r.prepare_joins(query)
-        for r in self._reverse_resources.values():
-            query = query.switch(self.model).join(r.model, JOIN.LEFT_OUTER)
-            query = r.prepare_joins(query)
+        for name, rr in self._reverse_resources.items():
+            query = query.switch(self.model).join(rr.model, JOIN.LEFT_OUTER, attr=rr.attr)
+            query = rr.resource.prepare_joins(query)
         return query
 
     def process_datetime_arg(self, arg):
@@ -289,6 +308,12 @@ class RestResource(object):
         # clean and normalize the request parameters
         for key in args:
             orig_key = key
+            if '__' in key:
+                expr, op = key.rsplit('__', 1)
+                for k, rr in self.reverse_resources.items():
+                    if expr == k and rr.attr:
+                        key = f"{rr.attr}__{op}"
+                        break
             if key.startswith('-'):
                 negated = True
                 key = key[1:]
@@ -346,6 +371,9 @@ class RestResource(object):
                                 query, filter_expr, op, arg_list, negated)
 
             for child_prefix, child_node in node.children.items():
+                for k, rr in self.reverse_resources.items():
+                    if child_prefix == k and rr.attr:
+                        child_prefix = rr.attr
                 queue.append((child_node, prefix + child_prefix + '__'))
 
         return query
@@ -411,10 +439,10 @@ class RestResource(object):
         return data
 
     def serialize_reverse_resources(self, obj, data):
-        for name, resource in self._reverse_resources.items():
-            sub_obj = getattr(obj, name, None)
+        for name, rr in self._reverse_resources.items():
+            sub_obj = getattr(obj, rr.attr or name, None)
             if sub_obj is not None:
-                data[name] = resource.serialize_object(sub_obj)
+                data[name] = rr.resource.serialize_object(sub_obj)
             else:
                 data[name] = None
 
