@@ -46,24 +46,21 @@ class Authentication(object):
     def __init__(self, protected_methods=[]):
         self.protected_methods = protected_methods
 
-    def authorize(self, resource):
+    def authorize_resource(self, resource):
         if request.method in self.protected_methods:
-            return False
+            raise NotAuthorizedException('Auth Failed')
 
+    def authorize_action(self, resource, action):
         return True
-
 
 class AdminAuthentication(Authentication):
     def verify_user(self, user):
         return user.admin
 
-    def authorize(self, resource):
-        return (
-            super().authorize(resource)
-            and current_user.is_authenticated
-            and self.verify_user(current_user)
-        )
-
+    def authorize_resource(self, resource):
+        super().authorize_resource(resource)
+        if not current_user.is_authenticated or not self.verify_user(current_user):
+            raise NotAuthorizedException('Auth Failed')
 
 class RestResource(object):
     paginate_by = 20
@@ -180,8 +177,11 @@ class RestResource(object):
         self.aliases[model][fk] = model_alias
         return model_alias
 
-    def authorize(self):
-        return self.authentication.authorize(self)
+    def authorize_resource(self):
+        return self.authentication.authorize_resource(self)
+
+    def authorize_action(self, action):
+        return self.authentication.authorize_action(self, action)
 
     def get_api_name(self):
         return slugify(self.model.__name__)
@@ -505,9 +505,7 @@ class RestResource(object):
                 return self.response_bad_method()
 
             try:
-                if not self.authorize():
-                    raise NotAuthorizedException
-
+                self.authorize_resource()
                 db = self.model._meta.database
                 return db.atomic()(func)(*args, **kwargs)
 
@@ -515,8 +513,8 @@ class RestResource(object):
                 return self.response_api_exception({'error': str(err)})
             except UserRequiredException:
                 return self.response_api_exception({'error': 'user required'})
-            except NotAuthorizedException:
-                return self.response_api_exception({'error': 'Auth Failed'}, status=401)
+            except NotAuthorizedException as err:
+                return self.response_api_exception({'error': str(err)}, status=401)
             except BadRequestException:
                 return self.response_bad_request()
         return inner
