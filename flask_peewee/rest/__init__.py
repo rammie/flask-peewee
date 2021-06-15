@@ -38,6 +38,10 @@ class UserRequiredException(Exception):
     """ Thrown if a user needs to be provided to complete the request. """
 
 
+class NotAuthorizedException(Exception):
+    """ Thrown if the action is not authorized. """
+
+
 class Authentication(object):
     def __init__(self, protected_methods=[]):
         self.protected_methods = protected_methods
@@ -92,7 +96,7 @@ class RestResource(object):
     expose_registry = False
 
     # http methods supported for `edit` operations.
-    edit_methods = ('PATCH', 'PUT', 'POST')
+    edit_methods = ('PUT', 'POST')
 
     prefetch = []
 
@@ -493,7 +497,7 @@ class RestResource(object):
         res.headers['Expires'] = 0
         return res
 
-    def require_method(self, func, methods):
+    def protect(self, func, methods):
         """ Overriden to add custom exception handling. """
         @functools.wraps(func)
         def inner(*args, **kwargs):
@@ -501,23 +505,30 @@ class RestResource(object):
                 return self.response_bad_method()
 
             try:
+                if not self.authorize():
+                    raise NotAuthorizedException
+
                 db = self.model._meta.database
                 return db.atomic()(func)(*args, **kwargs)
+
             except DoesNotExist as err:
                 return self.response_api_exception({'error': str(err)})
             except UserRequiredException:
                 return self.response_api_exception({'error': 'user required'})
+            except NotAuthorizedException:
+                return self.response_api_exception({'error': 'Auth Failed'}, status=401)
             except BadRequestException:
                 return self.response_bad_request()
         return inner
 
     def get_urls(self):
         return (
-            ('', self.require_method(self.api_list, ['GET', 'POST'])),
-            ('/<pk>', self.require_method(self.api_detail, ['GET', 'POST', 'PUT', 'DELETE'])),
-            ('/_registry', self.require_method(self.api_registry, ['GET'])),
-            ('/_count', self.require_method(self.api_count, ['GET'])),
-            ('/_exportable', self.require_method(self.api_exportable, ['GET'])),
+            ('', self.protect(self.api_list, ['GET', 'POST'])),
+            ('/<pk>', self.protect(self.api_detail, ['GET', 'POST', 'PUT', 'DELETE'])),
+            ('/<pk>/<path:path>', self.protect(self.api_detail_json, ['PUT', 'DELETE'])),
+            ('/_registry', self.protect(self.api_registry, ['GET'])),
+            ('/_count', self.protect(self.api_count, ['GET'])),
+            ('/_exportable', self.protect(self.api_exportable, ['GET'])),
         )
 
     def check_get(self, obj=None):
@@ -604,6 +615,24 @@ class RestResource(object):
                 'name': h
             } for h, c, _ in self.export_columns]
         })
+
+    def api_detail_json(self, pk, path, method=None):
+        parts = path.split('/', 1)
+        field_name, path = parts[0], parts[1:]
+
+        if field_name not in self.editable_json_fields:
+            return Response({'error': 'Not Found'}, 404)
+
+        obj = get_object_or_404(self.get_query(), self.pk == pk)
+        method = method or request.method
+        if not getattr(self, 'check_%s' % method.lower())(obj):
+            return self.response_forbidden()
+
+        field = getattr(obj, field_name)
+        if method == 'PUT':
+            return self.json_edit(obj, field, path)
+        elif method == 'DELETE':
+            return self.json_delete(obj, field, path)
 
     def apply_ordering(self, query):
         ordering = request.args.get('ordering') or ''
@@ -770,6 +799,34 @@ class RestResource(object):
         res = obj.delete_instance(recursive=self.delete_recursive)
         return self.response({'deleted': res})
 
+    def json_edit(self, obj, field, path):
+        data = self.read_request_data()
+        value = field
+        for key in path:
+            value = value.setdefault(key, {})
+
+        value.update(data)
+        obj.save()
+        return self.response(self.serialize_object(obj))
+
+    def json_delete(self, obj, field, path):
+        if not path:
+            return Response({'error': 'Cannot delete.'}, 403)
+
+        value = field
+        for key in path[:-1]:
+            value = value.setdefault(key, {})
+
+        key = path[-1]
+        deleted = False
+        if key in value:
+            del value[key]
+            deleted = True
+
+        obj.save()
+        return self.response({'deleted': deleted})
+
+
 
 class ReadOnlyResource(RestResource):
 
@@ -823,14 +880,6 @@ class RestAPI(object):
         self._registry.append(resource)
         return resource
 
-    def auth_wrapper(self, func, provider):
-        @functools.wraps(func)
-        def inner(*args, **kwargs):
-            if not provider.authorize():
-                return Response({'error': 'Auth Failed'}, 401)
-            return func(*args, **kwargs)
-        return inner
-
     def get_blueprint(self, blueprint_name):
         return Blueprint(blueprint_name, __name__)
 
@@ -848,7 +897,7 @@ class RestAPI(object):
                 self.blueprint.add_url_rule(
                     full_url,
                     '%s_%s' % (api_name, callback.__name__),
-                    self.auth_wrapper(callback, provider),
+                    callback,
                     methods=provider.allowed_methods,
                     strict_slashes=True,
                 )

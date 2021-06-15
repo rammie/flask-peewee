@@ -1,7 +1,7 @@
 # config
 
 
-class Configuration(object):
+class Configuration:
     DATABASE = {
         'name': 'postgres',
         'user': 'postgres',
