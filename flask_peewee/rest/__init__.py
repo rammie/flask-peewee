@@ -617,7 +617,7 @@ class RestResource(object):
         })
 
     def api_detail_json(self, pk, path, method=None):
-        parts = path.split('/', 1)
+        parts = path.split('/')
         field_name, path = parts[0], parts[1:]
 
         if field_name not in self.editable_json_fields:
