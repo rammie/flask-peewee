@@ -624,11 +624,10 @@ class RestResource(object):
         if not self.check_http_method(obj):
             return self.response_forbidden()
 
-        field = getattr(obj, field_name)
         if method == 'PUT':
-            return self.json_edit(obj, field, path)
+            return self.json_edit(obj, field_name, path)
         elif method == 'DELETE':
-            return self.json_delete(obj, field, path)
+            return self.json_delete(obj, field_name, path)
 
     def apply_ordering(self, query):
         ordering = request.args.get('ordering') or ''
@@ -795,9 +794,9 @@ class RestResource(object):
         res = obj.delete_instance(recursive=self.delete_recursive)
         return self.response({'deleted': res})
 
-    def json_edit(self, obj, field, path):
+    def json_edit(self, obj, field_name, path):
         data = self.read_request_data()
-        value = field
+        value = getattr(obj, field_name)
         for key in path:
             value = value.setdefault(key, {})
 
@@ -805,11 +804,11 @@ class RestResource(object):
         obj.save()
         return self.response(self.serialize_object(obj))
 
-    def json_delete(self, obj, field, path):
+    def json_delete(self, obj, field_name, path):
         if not path:
             return Response({'error': 'Cannot delete.'}, 403)
 
-        value = field
+        value = getattr(obj, field_name)
         for key in path[:-1]:
             value = value.setdefault(key, {})
 
