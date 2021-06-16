@@ -46,19 +46,16 @@ class Authentication(object):
     def __init__(self, protected_methods=[]):
         self.protected_methods = protected_methods
 
-    def authorize_resource(self, resource):
+    def authorize(self, resource):
         if request.method in self.protected_methods:
             raise NotAuthorizedException('Auth Failed')
-
-    def authorize_action(self, resource, action):
-        return True
 
 class AdminAuthentication(Authentication):
     def verify_user(self, user):
         return user.admin
 
-    def authorize_resource(self, resource):
-        super().authorize_resource(resource)
+    def authorize(self, resource):
+        super().authorize(resource)
         if not current_user.is_authenticated or not self.verify_user(current_user):
             raise NotAuthorizedException('Auth Failed')
 
@@ -177,11 +174,8 @@ class RestResource(object):
         self.aliases[model][fk] = model_alias
         return model_alias
 
-    def authorize_resource(self):
-        return self.authentication.authorize_resource(self)
-
-    def authorize_action(self, action):
-        return self.authentication.authorize_action(self, action)
+    def authorize(self):
+        return self.authentication.authorize(self)
 
     def get_api_name(self):
         return slugify(self.model.__name__)
@@ -505,7 +499,7 @@ class RestResource(object):
                 return self.response_bad_method()
 
             try:
-                self.authorize_resource()
+                self.authorize()
                 db = self.model._meta.database
                 return db.atomic()(func)(*args, **kwargs)
 
@@ -539,14 +533,18 @@ class RestResource(object):
         return True
 
     def check_delete(self, obj):
-        return False
+        return True
+
+    @property
+    def check_http_method(self):
+        return getattr(self, 'check_%s' % request.method.lower())
 
     def save_object(self, instance, raw_data):
         instance.save()
         return instance
 
     def api_list(self):
-        if not getattr(self, 'check_%s' % request.method.lower())():
+        if not self.check_http_method():
             return self.response_forbidden()
 
         if request.method == 'GET':
@@ -558,7 +556,7 @@ class RestResource(object):
         obj = get_object_or_404(self.get_query(), self.pk == pk)
 
         method = method or request.method
-        if not getattr(self, 'check_%s' % method.lower())(obj):
+        if not self.check_http_method(obj):
             return self.response_forbidden()
 
         if method == 'GET':
@@ -588,14 +586,14 @@ class RestResource(object):
         }
 
     def api_registry(self):
-        if not getattr(self, 'check_%s' % request.method.lower())():
+        if not self.check_http_method():
             return self.response_forbidden()
         if not self.expose_registry:
             return self.response_forbidden()
         return self.get_registry()
 
     def api_count(self):
-        if not getattr(self, 'check_%s' % request.method.lower())():
+        if not self.check_http_method():
             return self.response_forbidden()
 
         query = self.get_query()
@@ -604,7 +602,7 @@ class RestResource(object):
         return self.response({'count': query.count()})
 
     def api_exportable(self):
-        if not getattr(self, 'check_%s' % request.method.lower())():
+        if not self.check_http_method():
             return self.response_forbidden()
 
         return self.response({
@@ -623,7 +621,7 @@ class RestResource(object):
 
         obj = get_object_or_404(self.get_query(), self.pk == pk)
         method = method or request.method
-        if not getattr(self, 'check_%s' % method.lower())(obj):
+        if not self.check_http_method(obj):
             return self.response_forbidden()
 
         field = getattr(obj, field_name)
