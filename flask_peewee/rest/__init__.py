@@ -625,9 +625,16 @@ class RestResource(object):
 
         if request.method == 'GET':
             return self.json_value(obj, field, path)
+
+        # Fetch the object again, this time for update since
+        # the previous query may have included nullable outer joins
+        # which cannot be used with SELECT FOR UPDATE.
+        obj = self.model.select().where(self.pk == pk).for_update(True).get()
+
         if request.method == 'PUT':
             return self.json_edit(obj, field, path)
-        elif request.method == 'DELETE':
+
+        if request.method == 'DELETE':
             return self.json_delete(obj, field, path)
 
     def apply_ordering(self, query):
