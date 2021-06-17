@@ -123,7 +123,7 @@ class FModel(BaseModel):
 
 
 class JModel(BaseModel):
-    j_field = BinaryJSONField(default={})
+    j_field = BinaryJSONField(default=None)
 
 class DeletableResource(RestResource):
 

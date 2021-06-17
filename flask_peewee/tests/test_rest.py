@@ -101,7 +101,7 @@ class RestApiResourceTestCase(RestApiTestCase):
         self.e2 = EModel.create(e_field='e2')
         self.f1 = FModel.create(f_field='f1', e=self.e1)
         self.f2 = FModel.create(f_field='f2')
-        self.j1 = JModel.create(j_field={'foo': {'star': 'far'}, 'bar': 'car'})
+        self.j1 = JModel.create(j_field={'foo': {'star': 'far'}, 'bar': 'car', 'n': None})
 
     def test_resources_list_detail(self):
         self.create_test_models()
@@ -171,7 +171,7 @@ class RestApiResourceTestCase(RestApiTestCase):
         resp = self.app.get('/api/jmodel/%s' % self.j1.id)
         self.assertEqual(resp.get_json(), {
             'id': self.j1.id,
-            'j_field': {'foo': {'star': 'far'}, 'bar': 'car'},
+            'j_field': {'foo': {'star': 'far'}, 'bar': 'car', 'n': None},
         })
 
     def test_resources_count(self):
@@ -573,12 +573,17 @@ class RestApiResourceTestCase(RestApiTestCase):
         assert resp.get_json() == 'far'
 
         resp = self.app.get(url + '/j_field/foo/tzar')
+        self.assertEqual(resp.status_code, 404)
+
+        resp = self.app.get(url + '/j_field/n')
         self.assertEqual(resp.status_code, 200)
         assert resp.get_json() == None
 
         resp = self.app.get(url + '/j_field/foo/star/car')
-        self.assertEqual(resp.status_code, 200)
-        assert resp.get_json() == None
+        self.assertEqual(resp.status_code, 404)
+
+        resp = self.app.get(url + '/j_field/foo/star/car')
+        self.assertEqual(resp.status_code, 404)
 
     def test_json_edit(self):
         self.create_test_models()
@@ -595,13 +600,13 @@ class RestApiResourceTestCase(RestApiTestCase):
         self.assertEqual(resp.status_code, 200)
         j1 = JModel.get(JModel.id == self.j1.id)
         assert resp.get_json() == 'value'
-        assert j1.j_field == {'foo': {'star': 'far'}, 'bar': 'car', 'new': 'value'}
+        assert j1.j_field == {'foo': {'star': 'far'}, 'bar': 'car', 'n': None, 'new': 'value'}
 
         resp = self.app.put(url + '/j_field/foo', json={'star': 'sun'})
         self.assertEqual(resp.status_code, 200)
         j1 = JModel.get(JModel.id == self.j1.id)
         assert resp.get_json() == {'star': 'sun'}
-        assert j1.j_field == {'foo': {'star': 'sun'}, 'bar': 'car', 'new': 'value'}
+        assert j1.j_field == {'foo': {'star': 'sun'}, 'bar': 'car', 'n': None, 'new': 'value'}
 
         # test -p ness
         resp = self.app.put(url + '/j_field/fast/cars', json={'toycar': 1})
@@ -635,12 +640,18 @@ class RestApiResourceTestCase(RestApiTestCase):
         assert resp.get_json()['deleted'] is True
 
         j1 = JModel.get(JModel.id == self.j1.id)
+        assert j1.j_field == {'bar': 'car', 'n': None}
+
+        resp = self.app.delete(url + '/j_field/n')
+        self.assertEqual(resp.status_code, 200)
+        assert resp.get_json()['deleted'] is True
+
+        j1 = JModel.get(JModel.id == self.j1.id)
         assert j1.j_field == {'bar': 'car'}
 
         resp = self.app.delete(url + '/j_field/foo')
         self.assertEqual(resp.status_code, 200)
         assert resp.get_json()['deleted'] is False
-
 
 class RestApiBasicTestCase(RestApiTestCase):
     def get_users_and_notes(self):

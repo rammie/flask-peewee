@@ -806,8 +806,7 @@ class RestResource(object):
         value = getattr(obj, field_name)
         for key in path:
             if not isinstance(value, dict) or key not in value:
-                value = None
-                break
+                return Response({'error': 'Not Found'}, 404)
             value = value[key]
         return self.response(value)
 
