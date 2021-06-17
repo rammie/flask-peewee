@@ -605,11 +605,11 @@ class RestApiResourceTestCase(RestApiTestCase):
         assert resp.get_json() == 'value'
         assert j1.j_field == {'foo': {'star': 'far'}, 'bar': 'car', 'n': None, 'new': 'value'}
 
-        resp = self.app.put(url + '/j_field/foo', json={'star': 'sun'})
+        resp = self.app.put(url + '/j_field/foo', json={'planet': 'mars'})
         self.assertEqual(resp.status_code, 200)
         j1 = JModel.get(JModel.id == self.j1.id)
-        assert resp.get_json() == {'star': 'sun'}
-        assert j1.j_field == {'foo': {'star': 'sun'}, 'bar': 'car', 'n': None, 'new': 'value'}
+        assert resp.get_json() == {'planet': 'mars'}
+        assert j1.j_field == {'foo': {'planet': 'mars'}, 'bar': 'car', 'n': None, 'new': 'value'}
 
         # test -p ness
         resp = self.app.put(url + '/j_field/fast/cars', json={'toycar': 1})
@@ -637,6 +637,10 @@ class RestApiResourceTestCase(RestApiTestCase):
         assert resp.get_json()['deleted'] is False
         j1 = JModel.get(JModel.id == self.j1.id)
         assert j1.j_field == self.j1.j_field
+
+        resp = self.app.delete(url + '/j_field/foo/star')
+        self.assertEqual(resp.status_code, 200)
+        assert resp.get_json()['deleted'] is True
 
         resp = self.app.delete(url + '/j_field/foo')
         self.assertEqual(resp.status_code, 200)
