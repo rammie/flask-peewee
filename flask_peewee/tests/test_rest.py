@@ -1,6 +1,5 @@
 import json
 
-from unittest.mock import ANY
 from flask_peewee.tests.base import FlaskPeeweeTestCase
 from flask_peewee.tests.test_app import (
     db, AModel, BModel, BDetails, CModel,
@@ -221,21 +220,21 @@ class RestApiResourceTestCase(RestApiTestCase):
         # Test reverse resource serialization
         resp = self.app.get('/api/amodelv2')
         self.assertEqual(resp.get_json(), [
-            {'a_field': 'a1', 'bmodel_set': [{'a': ANY, 'b_field': 'b1', 'c': None}], 'id': ANY},
-            {'a_field': 'a2', 'bmodel_set': [{'a': ANY, 'b_field': 'b2', 'c': None}], 'id': ANY},
+            {'a_field': 'a1', 'bmodel_set': [{'a': self.a1.id, 'b_field': 'b1', 'c': None}], 'id': self.a1.id},
+            {'a_field': 'a2', 'bmodel_set': [{'a': self.a2.id, 'b_field': 'b2', 'c': None}], 'id': self.a2.id},
         ])
 
         # Test filter on reverse resources
         resp = self.app.get('/api/amodelv2?bmodel__b_field=b2')
         self.assertEqual(resp.get_json(), [
-            {'a_field': 'a2', 'bmodel_set': [{'a': ANY, 'b_field': 'b2', 'c': None}], 'id': ANY},
+            {'a_field': 'a2', 'bmodel_set': [{'a': self.a2.id, 'b_field': 'b2', 'c': None}], 'id': self.a2.id},
         ])
 
         # Test unique reverse resources
         self.c2 = CModel.create(c_field='c2', b=self.b2)
         resp = self.app.get('/api/bmodelv2?b_field=b2')
         self.assertEqual(resp.get_json(), [
-            {'a': ANY, 'b_field': 'b2', 'c': {"c_field": "c2", "b": ANY}},
+            {'a': self.a2.id, 'b_field': 'b2', 'c': {"c_field": "c2", "b": self.b2.id}},
         ])
 
         # Test empty reverse resources
