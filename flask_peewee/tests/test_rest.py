@@ -625,6 +625,12 @@ class RestApiResourceTestCase(RestApiTestCase):
         resp = self.app.delete(url + '/j_field')
         self.assertEqual(resp.status_code, 404)
 
+        resp = self.app.delete(url + '/j_field/foo/star/far/car')
+        self.assertEqual(resp.status_code, 200)
+        assert resp.get_json()['deleted'] is False
+        j1 = JModel.get(JModel.id == self.j1.id)
+        assert j1.j_field == self.j1.j_field
+
         resp = self.app.delete(url + '/j_field/foo')
         self.assertEqual(resp.status_code, 200)
         assert resp.get_json()['deleted'] is True
