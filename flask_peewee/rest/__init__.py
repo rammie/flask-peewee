@@ -90,7 +90,7 @@ class RestResource(object):
     expose_registry = False
 
     # http methods supported for `edit` operations.
-    edit_methods = ('PUT', 'POST')
+    edit_methods = ('PATCH', 'PUT', 'POST')
 
     prefetch = []
 
@@ -110,7 +110,7 @@ class RestResource(object):
         self.pk = model._meta.primary_key
 
         self.authentication = authentication
-        self.allowed_methods = allowed_methods or ['GET', 'POST', 'PUT', 'DELETE']
+        self.allowed_methods = allowed_methods or ['GET', 'PATCH', 'POST', 'PUT', 'DELETE']
 
         self.aliases = defaultdict(dict)
 
@@ -515,8 +515,8 @@ class RestResource(object):
     def get_urls(self):
         return (
             ('', self.protect(self.api_list, ['GET', 'POST'])),
-            ('/<pk>', self.protect(self.api_detail, ['GET', 'POST', 'PUT', 'DELETE'])),
-            ('/<pk>/<path:path>', self.protect(self.api_detail_json, ['PUT', 'DELETE'])),
+            ('/<pk>', self.protect(self.api_detail, ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'])),
+            ('/<pk>/<field>/<path:path>', self.protect(self.api_detail_json, ['GET', 'PUT', 'DELETE'])),
             ('/_registry', self.protect(self.api_registry, ['GET'])),
             ('/_count', self.protect(self.api_count, ['GET'])),
             ('/_exportable', self.protect(self.api_exportable, ['GET'])),
@@ -529,6 +529,9 @@ class RestResource(object):
         return True
 
     def check_put(self, obj):
+        return True
+
+    def check_patch(self, obj):
         return True
 
     def check_delete(self, obj):
@@ -610,21 +613,22 @@ class RestResource(object):
             } for h, c, _ in self.export_columns]
         })
 
-    def api_detail_json(self, pk, path):
-        parts = path.split('/')
-        field_name, path = parts[0], parts[1:]
+    def api_detail_json(self, pk, field, path):
+        path = path.split('/')
 
-        if field_name not in self.editable_json_fields:
+        if field not in self.editable_json_fields:
             return Response({'error': 'Not Found'}, 404)
 
         obj = get_object_or_404(self.get_query(), self.pk == pk)
         if not self.check_http_method(obj):
             return self.response_forbidden()
 
+        if request.method == 'GET':
+            return self.json_value(obj, field, path)
         if request.method == 'PUT':
-            return self.json_edit(obj, field_name, path)
+            return self.json_edit(obj, field, path)
         elif request.method == 'DELETE':
-            return self.json_delete(obj, field_name, path)
+            return self.json_delete(obj, field, path)
 
     def apply_ordering(self, query):
         ordering = request.args.get('ordering') or ''
@@ -760,11 +764,11 @@ class RestResource(object):
         except ValueError:
             if not request.form:
                 raise BadRequest
-            data = MultiDict(request.form)
 
-        for k, v in data.items():
-            if k in self.escaped_fields:
-                data[k] = v and cgi.escape(v)
+            data = MultiDict(request.form)
+            for k, v in data.items():
+                if k in self.escaped_fields:
+                    data[k] = v and cgi.escape(v)
 
         return data
 
@@ -791,23 +795,33 @@ class RestResource(object):
         res = obj.delete_instance(recursive=self.delete_recursive)
         return self.response({'deleted': res})
 
-    def json_edit(self, obj, field_name, path):
-        data = self.read_request_data()
+    def json_value(self, obj, field_name, path):
         value = getattr(obj, field_name)
         for key in path:
-            value = value.setdefault(key, {})
+            if not isinstance(value, dict) or key not in value:
+                value = None
+                break
+            value = value[key]
+        return self.response(value)
 
-        value.update(data)
-        obj.save()
-        return self.response(self.serialize_object(obj))
-
-    def json_delete(self, obj, field_name, path):
-        if not path:
-            return Response({'error': 'Cannot delete.'}, 403)
-
+    def json_edit(self, obj, field_name, path):
         value = getattr(obj, field_name)
         for key in path[:-1]:
-            value = value.setdefault(key, {})
+            if key not in value or not isinstance(value[key], dict):
+                value[key] = {}
+            value = value[key]
+
+        key = path[-1]
+        value[key] = self.read_request_data()
+        obj.save()
+        return self.response(value[key])
+
+    def json_delete(self, obj, field_name, path):
+        value = getattr(obj, field_name)
+        for key in path[:-1]:
+            if key not in value or not isinstance(value[key], dict):
+                value[key] = {}
+            value = value[key]
 
         key = path[-1]
         deleted = False
@@ -830,6 +844,9 @@ class ReadOnlyResource(RestResource):
     def check_put(self, obj):
         return False
 
+    def check_patch(self, obj):
+        return False
+
 
 class RestrictOwnerResource(RestResource):
     """ Restrict writes to owner of an object. """
@@ -848,6 +865,9 @@ class RestrictOwnerResource(RestResource):
         return not current_user.is_anonymous
 
     def check_put(self, obj):
+        return self.validate_owner(obj)
+
+    def check_patch(self, obj):
         return self.validate_owner(obj)
 
     def check_delete(self, obj):

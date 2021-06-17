@@ -36,7 +36,7 @@ class NoteResource(RestrictOwnerResource):
     }
 
     def get_query(self):
-        query = super(NoteResource, self).get_query()
+        query = super().get_query()
         return query.where(Note.status == 1)
 
 
