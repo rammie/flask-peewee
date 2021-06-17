@@ -559,7 +559,7 @@ class RestApiResourceTestCase(RestApiTestCase):
         self.assertEqual(resp.status_code, 404)
 
         # test wrong field name
-        resp = self.app.get('/api/jmodel/9000/no_field/new')
+        resp = self.app.get('/api/jmodel/%s/no_field/new' % self.j1.id)
         self.assertEqual(resp.status_code, 404)
 
         url = '/api/jmodel/%s' % self.j1.id
@@ -585,6 +585,9 @@ class RestApiResourceTestCase(RestApiTestCase):
         resp = self.app.get(url + '/j_field/foo/star/car')
         self.assertEqual(resp.status_code, 404)
 
+        resp = self.app.get(url + '/j_field/foo/star')
+        self.assertEqual(resp.status_code, 200)
+
     def test_json_edit(self):
         self.create_test_models()
         # test wrong pk
@@ -592,7 +595,7 @@ class RestApiResourceTestCase(RestApiTestCase):
         self.assertEqual(resp.status_code, 404)
 
         # test wrong field name
-        resp = self.app.put('/api/jmodel/9000/no_field/new', json='value')
+        resp = self.app.put('/api/jmodel/%s/no_field/new' % self.j1.id, json='value')
         self.assertEqual(resp.status_code, 404)
 
         url = '/api/jmodel/%s' % self.j1.id
@@ -622,7 +625,7 @@ class RestApiResourceTestCase(RestApiTestCase):
         self.assertEqual(resp.status_code, 404)
 
         # test wrong field name
-        resp = self.app.delete('/api/jmodel/9000/no_field/foo')
+        resp = self.app.delete('/api/jmodel/%s/no_field/foo' % self.j1.id)
         self.assertEqual(resp.status_code, 404)
 
         url = '/api/jmodel/%s' % self.j1.id
