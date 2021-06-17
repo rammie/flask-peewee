@@ -133,9 +133,9 @@ class StatsMixin(object):
 
     def get_urls(self):
         return super().get_urls() + (
-            ("/stats/", self.require_method(self.stats_all, ["GET"])),
-            ("/stats/<path:group_by>/", self.require_method(self.stats, ["GET"])),
-            ("/keys/<field>", self.require_method(self.jsonb_keys, ["GET"])),
+            ("/stats/", self.protect(self.stats_all, ["GET"])),
+            ("/stats/<path:group_by>/", self.protect(self.stats, ["GET"])),
+            ("/keys/<field>", self.protect(self.jsonb_keys, ["GET"])),
         )
 
     def jsonb_keys(self, field):

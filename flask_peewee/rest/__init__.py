@@ -30,15 +30,15 @@ DJANGO_MAP.update(
 )
 
 
-class BadRequestException(Exception):
+class BadRequest(Exception):
     """ Thrown if there is an error while parsing the request. """
 
 
-class UserRequiredException(Exception):
+class UserRequired(Exception):
     """ Thrown if a user needs to be provided to complete the request. """
 
 
-class NotAuthorizedException(Exception):
+class NotAuthorized(Exception):
     """ Thrown if the action is not authorized. """
 
 
@@ -48,7 +48,7 @@ class Authentication(object):
 
     def authorize(self, resource):
         if request.method in self.protected_methods:
-            raise NotAuthorizedException('Auth Failed')
+            raise NotAuthorized('Auth Failed')
 
 class AdminAuthentication(Authentication):
     def verify_user(self, user):
@@ -57,7 +57,7 @@ class AdminAuthentication(Authentication):
     def authorize(self, resource):
         super().authorize(resource)
         if not current_user.is_authenticated or not self.verify_user(current_user):
-            raise NotAuthorizedException('Auth Failed')
+            raise NotAuthorized('Auth Failed')
 
 class RestResource(object):
     paginate_by = 20
@@ -102,7 +102,7 @@ class RestResource(object):
     def user(self):
         if hasattr(self, '_user'):
             return self._user
-        raise UserRequiredException
+        raise UserRequired
 
     def __init__(self, rest_api, model, authentication, allowed_methods=None):
         self.api = rest_api
@@ -492,7 +492,6 @@ class RestResource(object):
         return res
 
     def protect(self, func, methods):
-        """ Overriden to add custom exception handling. """
         @functools.wraps(func)
         def inner(*args, **kwargs):
             if request.method not in methods:
@@ -505,11 +504,11 @@ class RestResource(object):
 
             except DoesNotExist as err:
                 return self.response_api_exception({'error': str(err)})
-            except UserRequiredException:
+            except UserRequired:
                 return self.response_api_exception({'error': 'user required'})
-            except NotAuthorizedException as err:
+            except NotAuthorized as err:
                 return self.response_api_exception({'error': str(err)}, status=401)
-            except BadRequestException:
+            except BadRequest:
                 return self.response_bad_request()
         return inner
 
@@ -552,18 +551,17 @@ class RestResource(object):
         elif request.method == 'POST':
             return self.create()
 
-    def api_detail(self, pk, method=None):
+    def api_detail(self, pk):
         obj = get_object_or_404(self.get_query(), self.pk == pk)
 
-        method = method or request.method
         if not self.check_http_method(obj):
             return self.response_forbidden()
 
-        if method == 'GET':
+        if request.method == 'GET':
             return self.object_detail(obj)
-        elif method in self.edit_methods:
+        elif request.method in self.edit_methods:
             return self.edit(obj)
-        elif method == 'DELETE':
+        elif request.method == 'DELETE':
             return self.delete(obj)
 
     def get_fields(self, node, prefix=[]):
@@ -612,7 +610,7 @@ class RestResource(object):
             } for h, c, _ in self.export_columns]
         })
 
-    def api_detail_json(self, pk, path, method=None):
+    def api_detail_json(self, pk, path):
         parts = path.split('/')
         field_name, path = parts[0], parts[1:]
 
@@ -620,13 +618,12 @@ class RestResource(object):
             return Response({'error': 'Not Found'}, 404)
 
         obj = get_object_or_404(self.get_query(), self.pk == pk)
-        method = method or request.method
         if not self.check_http_method(obj):
             return self.response_forbidden()
 
-        if method == 'PUT':
+        if request.method == 'PUT':
             return self.json_edit(obj, field_name, path)
-        elif method == 'DELETE':
+        elif request.method == 'DELETE':
             return self.json_delete(obj, field_name, path)
 
     def apply_ordering(self, query):
@@ -762,7 +759,7 @@ class RestResource(object):
             data = json.loads(data.decode())
         except ValueError:
             if not request.form:
-                raise BadRequestException
+                raise BadRequest
             data = MultiDict(request.form)
 
         for k, v in data.items():
@@ -818,7 +815,9 @@ class RestResource(object):
             del value[key]
             deleted = True
 
-        obj.save()
+        if deleted:
+            obj.save()
+
         return self.response({'deleted': deleted})
 
 

@@ -578,7 +578,6 @@ class RestApiResourceTestCase(RestApiTestCase):
         resp = self.app.put(url + '/j_field/fast/cars', json={'toycar': 1})
         self.assertEqual(resp.status_code, 200)
         j1 = JModel.get(JModel.id == self.j1.id)
-        print(j1.j_field)
         assert j1.j_field['fast'] == {'cars': {'toycar': 1}}
 
     def test_json_delete(self):
