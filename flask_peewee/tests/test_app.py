@@ -10,7 +10,7 @@ from peewee import (
     Model,
 )
 
-from playhouse.postgres_ext import PostgresqlExtDatabase
+from playhouse.postgres_ext import PostgresqlExtDatabase, BinaryJSONField
 
 # flask-peewee bindings
 from flask_peewee.rest import AdminAuthentication
@@ -122,6 +122,9 @@ class FModel(BaseModel):
     f_field = CharField()
 
 
+class JModel(BaseModel):
+    j_field = BinaryJSONField(default=None)
+
 class DeletableResource(RestResource):
 
     def check_delete(self, obj):
@@ -155,6 +158,9 @@ class EResource(DeletableResource):
 class FResource(DeletableResource):
     include_resources = {'e': EResource}
 
+
+class JResource(DeletableResource):
+    editable_json_fields = ('j_field', )
 
 class V2Resource(DeletableResource):
 
@@ -190,6 +196,7 @@ api.register(CModel, CResource, auth=dummy_auth)
 
 api.register(EModel, EResource, auth=dummy_auth)
 api.register(FModel, FResource, auth=dummy_auth)
+api.register(JModel, JResource, auth=dummy_auth)
 
 api.register(AModel, AResourceV2, auth=dummy_auth)
 api.register(BModel, BResourceV2, auth=dummy_auth)
