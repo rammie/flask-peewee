@@ -92,6 +92,8 @@ class RestResource(object):
     # http methods supported for `edit` operations.
     edit_methods = ('PATCH', 'PUT', 'POST')
 
+    enable_row_count = True
+
     prefetch = []
 
     @classmethod
@@ -663,7 +665,7 @@ class RestResource(object):
 
         return {
             'model': self.get_api_name(),
-            'count': paginated_query.query.count(),
+            'count': paginated_query.query.count() if self.enable_row_count else None,
             'page': current_page,
             'previous': previous_page,
             'next': next_page,
