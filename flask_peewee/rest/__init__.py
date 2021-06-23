@@ -476,6 +476,9 @@ class RestResource(object):
     def response_bad_request(self):
         return Response('Bad request', 400)
 
+    def response_not_found(self):
+        return Response('Not found', 404)
+
     def response_api_exception(self, data, status=400):
         return Response(json.dumps(data), status, mimetype='application/json')
 
@@ -596,6 +599,9 @@ class RestResource(object):
         return self.get_registry()
 
     def api_count(self):
+        if not self.enable_row_count:
+            return self.response_not_found()
+
         if not self.check_http_method():
             return self.response_forbidden()
 
